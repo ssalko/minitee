@@ -1,0 +1,2 @@
+# minitee
+TEE for FreeRTOS
