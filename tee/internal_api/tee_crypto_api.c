@@ -521,6 +521,7 @@ static bool cpy_key_comp_to_bn(void **bn, uint32_t attrID, TEE_ObjectHandle key)
 	}
 
 #ifdef XXX
+// memcopy
 	*bn = BN_bin2bn(rsa_component->content.ref.buffer, rsa_component->content.ref.length, *bn);
 #endif
 	if (!*bn) {
@@ -550,14 +551,15 @@ static void free_key_and_ctx(TEE_OperationHandle operation)
 	if (operation->operation_info.operationClass == TEE_OPERATION_CIPHER) {
 
 #ifdef XXX
+// nothing ?
 		/* Free EVP sturcture */
 		EVP_CIPHER_CTX_cleanup(SYM_ctx(operation));
 		EVP_CIPHER_CTX_free(SYM_ctx(operation));
-#endif
 
 		/* Free key */
 		rand_buf(SYM_key(operation), SYM_key_len(operation));
 		rand_buf(&SYM_key_len(operation), sizeof(SYM_key_len(operation)));
+#endif
 		TEE_Free(SYM_key(operation));
 
 	} else if (operation->operation_info.operationClass == TEE_OPERATION_DIGEST) {
