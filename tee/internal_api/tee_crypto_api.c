@@ -94,7 +94,9 @@ struct operation_key {
 struct __TEE_OperationHandle {
 	TEE_OperationInfo operation_info;
 	struct operation_key key;
-	void *dig_ctx;
+	//void *dig_ctx;
+	struct hash_state *digest;
+	struct ltc_hash_descriptor *desc;
 	uint32_t op_state;
 	uint32_t key_size2; /* If operation has two key, this is second key len */
 };
@@ -539,8 +541,8 @@ static void rand_buf(void *buf, uint32_t len)
 
 #ifdef XXX
 	if (!RAND_bytes(buf, len))
-#endif
 		TEE_MemFill(buf, 0, len);
+#endif
 }
 
 static void free_key_and_ctx(TEE_OperationHandle operation)
@@ -559,8 +561,8 @@ static void free_key_and_ctx(TEE_OperationHandle operation)
 		/* Free key */
 		rand_buf(SYM_key(operation), SYM_key_len(operation));
 		rand_buf(&SYM_key_len(operation), sizeof(SYM_key_len(operation)));
-#endif
 		TEE_Free(SYM_key(operation));
+#endif
 
 	} else if (operation->operation_info.operationClass == TEE_OPERATION_DIGEST) {
 
@@ -1243,38 +1245,55 @@ static const void *load_evp_sym_cipher(TEE_OperationHandle operation)
 
 static TEE_Result init_digest_op(TEE_OperationHandle operation, uint32_t algorithm)
 {
-#ifdef XXX
-	const hash_state *digest;
+	//const hash_state *digest;
+	operation->desc = TEE_Malloc(sizeof(struct ltc_hash_descriptor));
 
 	switch (algorithm) {
 	case TEE_ALG_MD5:
-		digest = EVP_md5();
-		operation->operation_info.digestLength = hash_state_size(digest);
+		operation->digest = TEE_Malloc(sizeof(struct md5_state));
+		md5_init(operation->digest); // = EVP_md5();
+//		operation->operation_info.digestLength = hash_state_size(digest);
 		break;
 
 	case TEE_ALG_SHA1:
-		digest = EVP_sha1();
-		operation->operation_info.digestLength = hash_state_size(digest);
+//		digest = EVP_sha1();
+//		operation->operation_info.digestLength = hash_state_size(digest);
+		operation->digest = TEE_Malloc(sizeof(struct sha1_state));
+		sha1_init(operation->digest); // = EVP_md5();
+//		operation->operation_info.digestLength = sha1_desc.hashsize; //hash_state_size(digest);
 		break;
 
 	case TEE_ALG_SHA224:
-		digest = EVP_sha224();
-		operation->operation_info.digestLength = hash_state_size(digest);
+//		digest = EVP_sha224();
+//		operation->operation_info.digestLength = hash_state_size(digest);
+		operation->digest = TEE_Malloc(sizeof(struct sha224_state));
+		sha224_init(operation->digest); // = EVP_md5();
+//		operation->operation_info.digestLength = sha224_desc.hashsize; //hash_state_size(digest);
 		break;
 
 	case TEE_ALG_SHA256:
-		digest = EVP_sha256();
-		operation->operation_info.digestLength = hash_state_size(digest);
+//		digest = EVP_sha256();
+//		operation->operation_info.digestLength = hash_state_size(digest);
+		operation->digest = TEE_Malloc(sizeof(struct sha256_state));
+		sha256_init(operation->digest); // = EVP_md5();
+	
+//		operation->operation_info.digestLength = sha256_desc.hashsize; //hash_state_size(digest);
 		break;
 
 	case TEE_ALG_SHA384:
-		digest = EVP_sha384();
-		operation->operation_info.digestLength = hash_state_size(digest);
+//		digest = EVP_sha384();
+//		operation->operation_info.digestLength = hash_state_size(digest);
+		operation->digest = TEE_Malloc(sizeof(struct sha384_state));
+		sha384_init(operation->digest); // = EVP_md5();
+//		operation->operation_info.digestLength = sha384_desc.hashsize; //hash_state_size(digest);
 		break;
 
 	case TEE_ALG_SHA512:
-		digest = EVP_sha512();
-		operation->operation_info.digestLength = hash_state_size(digest);
+//		digest = EVP_sha512();
+//		operation->operation_info.digestLength = hash_state_size(digest);
+		operation->digest = TEE_Malloc(sizeof(struct sha512_state));
+		sha512_init(operation->digest); // = EVP_md5();
+//		operation->operation_info.digestLength = sha512_desc.hashsize; //hash_state_size(digest);
 		break;
 
 	default:
@@ -1283,17 +1302,16 @@ static TEE_Result init_digest_op(TEE_OperationHandle operation, uint32_t algorit
 		return TEE_ERROR_NOT_SUPPORTED;
 	}
 
-	operation->dig_ctx = (hash_state_CTX *)hash_state_CTX_create();
-	if (!DIGEST_CTX(operation)) {
-		OT_LOG(LOG_ERR, "Init deigest op: out of memory: hash_state_ctx\n");
-		return TEE_ERROR_OUT_OF_MEMORY;
-	}
+//	operation->dig_ctx = (hash_state_CTX *)hash_state_CTX_create();
+//	if (!DIGEST_CTX(operation)) {
+//		OT_LOG(LOG_ERR, "Init deigest op: out of memory: hash_state_ctx\n");
+//		return TEE_ERROR_OUT_OF_MEMORY;
+//	}
 
-	if (EVP_DigestInit_ex(DIGEST_CTX(operation), digest, NULL) != 1) {
-		OT_LOG(LOG_ERR, "Init deigest op: Problem with digest init (openssl failure)\n");
-		return TEE_ERROR_OUT_OF_MEMORY;
-	}
-#endif
+//	if (EVP_DigestInit_ex(DIGEST_CTX(operation), digest, NULL) != 1) {
+//		OT_LOG(LOG_ERR, "Init deigest op: Problem with digest init (openssl failure)\n");
+//		return TEE_ERROR_OUT_OF_MEMORY;
+//	}
 
 	/* Digest has not init function */
 	operation->operation_info.handleState |= TEE_HANDLE_FLAG_INITIALIZED;
@@ -1315,36 +1333,35 @@ static const hash_state *load_evp_asym_hash(TEE_OperationHandle operation)
 	case TEE_ALG_RSA_NOPAD:
 		return NULL;
 
-#ifdef XXX
 	case TEE_ALG_RSAES_PKCS1_V1_5:
 	case TEE_ALG_RSASSA_PKCS1_V1_5_MD5:
-		return EVP_md5();
+//		return EVP_md5();
 
 	case TEE_ALG_RSAES_PKCS1_OAEP_MGF1_SHA1:
 	case TEE_ALG_RSASSA_PKCS1_V1_5_SHA1:
 	case TEE_ALG_RSASSA_PKCS1_PSS_MGF1_SHA1:
-		return EVP_sha1();
+//		return EVP_sha1();
 
 	case TEE_ALG_RSAES_PKCS1_OAEP_MGF1_SHA224:
 	case TEE_ALG_RSASSA_PKCS1_V1_5_SHA224:
 	case TEE_ALG_RSASSA_PKCS1_PSS_MGF1_SHA224:
-		return EVP_sha224();
+//		return EVP_sha224();
 
 	case TEE_ALG_RSAES_PKCS1_OAEP_MGF1_SHA256:
 	case TEE_ALG_RSASSA_PKCS1_V1_5_SHA256:
 	case TEE_ALG_RSASSA_PKCS1_PSS_MGF1_SHA256:
-		return EVP_sha256();
+//		return EVP_sha256();
 
 	case TEE_ALG_RSAES_PKCS1_OAEP_MGF1_SHA384:
 	case TEE_ALG_RSASSA_PKCS1_V1_5_SHA384:
 	case TEE_ALG_RSASSA_PKCS1_PSS_MGF1_SHA384:
-		return EVP_sha384();
+//		return EVP_sha384();
 
 	case TEE_ALG_RSAES_PKCS1_OAEP_MGF1_SHA512:
 	case TEE_ALG_RSASSA_PKCS1_V1_5_SHA512:
 	case TEE_ALG_RSASSA_PKCS1_PSS_MGF1_SHA512:
-		return EVP_sha512();
-#endif
+//		return EVP_sha512();
+
 	default:
 		OT_LOG(LOG_ERR, "load_evp_asym_hash: Alg not supported\n");
 		TEE_Panic(TEE_ERROR_NOT_SUPPORTED);
@@ -1355,6 +1372,7 @@ static const hash_state *load_evp_asym_hash(TEE_OperationHandle operation)
 
 static TEE_Result malloc_and_cpy_rsa_key(TEE_OperationHandle operation, TEE_ObjectHandle key)
 {
+#if xxx
 	if (!RSA_key(operation)) {
 		OT_LOG(LOG_ERR, "cpy RSA key: Not a proper operation handler\n");
 		TEE_Panic(TEE_ERROR_BAD_STATE);
@@ -1392,6 +1410,7 @@ static TEE_Result malloc_and_cpy_rsa_key(TEE_OperationHandle operation, TEE_Obje
 			}
 		}
 	}
+#endif
 
 	return TEE_SUCCESS;
 }
@@ -1400,14 +1419,10 @@ static uint32_t rsa_msg_max_len(TEE_OperationHandle operation, const hash_state 
 {
 	switch (operation->operation_info.algorithm) {
 	case TEE_ALG_RSAES_PKCS1_V1_5:
-#ifdef XXX
-		return RSA_size(RSA_key(operation)) - 11;
-#endif
+//		return RSA_size(RSA_key(operation)) - 11;
 
 	case TEE_ALG_RSA_NOPAD:
-#ifdef XXX
-		return RSA_size(RSA_key(operation));
-#endif
+//		return RSA_size(RSA_key(operation));
 
 	case TEE_ALG_RSAES_PKCS1_OAEP_MGF1_SHA1:
 	case TEE_ALG_RSAES_PKCS1_OAEP_MGF1_SHA224:
@@ -1420,10 +1435,8 @@ static uint32_t rsa_msg_max_len(TEE_OperationHandle operation, const hash_state 
 			TEE_Panic(TEE_ERROR_GENERIC);
 		}
 
-#ifdef XXX
 		/* Buf max size: RSA modulo - 2 * Hash Out Put - 2 */
-		return (RSA_size(RSA_key(operation)) - (2 * hash_state_size(hash)) - 2);
-#endif
+//		return (RSA_size(RSA_key(operation)) - (2 * hash_state_size(hash)) - 2);
 
 	default:
 		/* Should never end up here */
@@ -1439,12 +1452,10 @@ static TEE_Result check_rsa_bufs_len(TEE_OperationHandle operation, const hash_s
 {
 	if (operation->operation_info.mode == TEE_MODE_ENCRYPT) {
 
-#ifdef XXX
-		if (RSA_size(RSA_key(operation)) > uint322int(dst_buf_len)) {
-			OT_LOG(LOG_ERR, "check_rsa_bufs_len: Dest buf should be rsa mod size\n");
-			return TEE_ERROR_SHORT_BUFFER;
-		}
-#endif
+//		if (RSA_size(RSA_key(operation)) > uint322int(dst_buf_len)) {
+//			OT_LOG(LOG_ERR, "check_rsa_bufs_len: Dest buf should be rsa mod size\n");
+//			return TEE_ERROR_SHORT_BUFFER;
+//		}
 
 		if (src_buf_len > rsa_msg_max_len(operation, hash)) {
 			OT_LOG(LOG_ERR, "check_rsa_bufs_len: Src buf too large\n");
@@ -1459,12 +1470,10 @@ static TEE_Result check_rsa_bufs_len(TEE_OperationHandle operation, const hash_s
 			return TEE_ERROR_SHORT_BUFFER;
 		}
 
-#ifdef XXX
-		if (RSA_size(RSA_key(operation)) != uint322int(src_buf_len)) {
-			OT_LOG(LOG_ERR, "check_rsa_bufs_len: Src buf should be rsa mod size\n");
-			return TEE_ERROR_BAD_PARAMETERS;
+	//	if (RSA_size(RSA_key(operation)) != uint322int(src_buf_len)) {
+	//		OT_LOG(LOG_ERR, "check_rsa_bufs_len: Src buf should be rsa mod size\n");
+	//		return TEE_ERROR_BAD_PARAMETERS;
 		}
-#endif
 	}
 
 	return TEE_SUCCESS;
@@ -1504,15 +1513,13 @@ static bool add_rsa_cipher_padding(TEE_OperationHandle operation, void *srcData,
 		return true;
 	}
 
-#ifdef XXX
 	get_rsa_oaep_label(params, paramCount, oaep_label, &oaep_label_len);
 
-	if (!beta_RSA_padding_add_PKCS1_OAEP_mgf1(destData, *destLen, srcData, srcLen, oaep_label,
-						  oaep_label_len, hash, NULL)) {
-		OT_LOG(LOG_ERR, "add_rsa_cipher_padding: Padding failure (openssl)\n");
-		return false;
-	}
-#endif
+//	if (!beta_RSA_padding_add_PKCS1_OAEP_mgf1(destData, *destLen, srcData, srcLen, oaep_label,
+//						  oaep_label_len, hash, NULL)) {
+//		OT_LOG(LOG_ERR, "add_rsa_cipher_padding: Padding failure (openssl)\n");
+//		return false;
+//	}
 
 	return true;
 }
@@ -1531,17 +1538,15 @@ static bool remove_rsa_cipher_padding(TEE_OperationHandle operation, void *srcDa
 		return true;
 	}
 
-#ifdef XXX
 	get_rsa_oaep_label(params, paramCount, oaep_label, &oaep_label_len);
 
-	if (-1 == beta_RSA_padding_check_PKCS1_OAEP_mgf1(destData, *destLen,
-						    (unsigned char *)srcData + 1, srcLen - 1,
-						    RSA_size(RSA_key(operation)),
-						    oaep_label, oaep_label_len, hash, NULL)) {
-		OT_LOG(LOG_ERR, "remove_rsa_cipher_padding: Padding failure (openssl)\n");
-		return false;
-	}
-#endif
+//	if (-1 == beta_RSA_padding_check_PKCS1_OAEP_mgf1(destData, *destLen,
+//						    (unsigned char *)srcData + 1, srcLen - 1,
+//						    RSA_size(RSA_key(operation)),
+//						    oaep_label, oaep_label_len, hash, NULL)) {
+//		OT_LOG(LOG_ERR, "remove_rsa_cipher_padding: Padding failure (openssl)\n");
+//		return false;
+//	}
 
 	return true;
 }
@@ -1575,9 +1580,7 @@ static TEE_Result rsa_op_generic_pre_checks_and_setup(TEE_OperationHandle operat
 	if (ret != TEE_SUCCESS)
 		return ret; /* Err msg has been written to log */
 
-#ifdef XXX
-	*rsa_mod_len = RSA_size(RSA_key(operation));
-#endif
+	*rsa_mod_len = 0; //RSA_size(RSA_key(operation));
 	*rsa_mod_len_buf = TEE_Malloc(*rsa_mod_len, 0);
 	if (!*rsa_mod_len_buf) {
 		OT_LOG(LOG_ERR, "rsa_op_generic_pre_checks_and_setup: Out of memory\n");
@@ -3144,19 +3147,18 @@ void TEE_DigestUpdate(TEE_OperationHandle operation, void *chunk, uint32_t chunk
 		TEE_Panic(TEE_ERROR_BAD_PARAMETERS);
 	}
 
-	if (!DIGEST_CTX(operation) ||
+	if (/*!DIGEST_CTX(operation) || */
 	    operation->operation_info.operationClass != TEE_OPERATION_DIGEST ||
 	    !(operation->operation_info.handleState & TEE_HANDLE_FLAG_INITIALIZED)) {
 		OT_LOG(LOG_ERR, "Digest update: Operation state\n");
 		TEE_Panic(TEE_ERROR_BAD_STATE);
 	}
 
-#ifdef XXX
-	if (EVP_DigestUpdate(DIGEST_CTX(operation), chunk, chunkSize) != 1) {
+//	if (EVP_DigestUpdate(DIGEST_CTX(operation), chunk, chunkSize) != 1) {
+	if (operation->desc->process(operation->digest, chuck, chunkSize)) {
 		OT_LOG(LOG_ERR, "Digest update: Update problem (openssl failure)\n");
 		TEE_Panic(TEE_ERROR_BAD_PARAMETERS);
 	}
-#endif
 
 	operation->op_state = TEE_OP_STATE_ACTIVE;
 }
@@ -3189,13 +3191,12 @@ TEE_Result TEE_DigestDoFinal(TEE_OperationHandle operation, void *chunk, uint32_
 	if (chunkLen > 0)
 		TEE_DigestUpdate(operation, chunk, chunkLen);
 
-#ifdef XXX
 	/* Finalize and return hash */
-	if (EVP_DigestFinal_ex(DIGEST_CTX(operation), hash, &int_hashLen) != 1) {
+//	if (EVP_DigestFinal_ex(DIGEST_CTX(operation), hash, &int_hashLen) != 1) {
+	if (operation->desc->done(operation->digest, hash, &int_hashLen) != 0) {
 		OT_LOG(LOG_ERR, "Digest final: Update problem (openssl failure)\n");
 		TEE_Panic(TEE_ERROR_BAD_PARAMETERS);
 	}
-#endif
 
 	*hashLen = int2uint32(int_hashLen);
 
