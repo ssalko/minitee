@@ -2,12 +2,6 @@
     FreeRTOS V7.0.1 - Copyright (C) 2011 Real Time Engineers Ltd.
 	
 
-	FreeRTOS supports many tools and architectures. V7.0.0 is sponsored by:
-	Atollic AB - Atollic provides professional embedded systems development 
-	tools for C/C++ development, code analysis and test automation.  
-	See http://www.atollic.com
-	
-
     ***************************************************************************
      *                                                                       *
      *    FreeRTOS tutorial books are available in pdf and paperback.        *
@@ -57,27 +51,102 @@
     licensing and training services.
 */
 
-#ifndef PROJDEFS_H
-#define PROJDEFS_H
 
-/* Defines the prototype to which task functions must conform. */
-typedef void (*pdTASK_CODE)( void * );
+/*
+ * The simplest possible implementation of pvPortMalloc().  Note that this
+ * implementation does NOT allow allocated memory to be freed again.
+ *
+ * See heap_2.c and heap_3.c for alternative implementations, and the memory
+ * management pages of http://www.FreeRTOS.org for more information.
+ */
+#include <stdlib.h>
 
-#define pdTRUE		( 1 )
-#define pdFALSE		( 0 )
+/* Defining MPU_WRAPPERS_INCLUDED_FROM_API_FILE prevents task.h from redefining
+all the API functions to use the MPU wrappers.  That should only be done when
+task.h is included from an application file. */
+#define MPU_WRAPPERS_INCLUDED_FROM_API_FILE
 
-#define pdPASS									( 1 )
-#define pdFAIL									( 0 )
-#define errQUEUE_EMPTY							( 0 )
-#define errQUEUE_FULL							( 0 )
+#include "FreeRTOS.h"
+#include "task.h"
 
-/* Error definitions. */
-#define errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY	( -1 )
-#define errNO_TASK_TO_RUN						( -2 )
-#define errQUEUE_BLOCKED						( -4 )
-#define errQUEUE_YIELD							( -5 )
+#undef MPU_WRAPPERS_INCLUDED_FROM_API_FILE
 
-#endif /* PROJDEFS_H */
+/* Allocate the memory for the heap.  The struct is used to force byte
+alignment without using any non-portable code. */
+static union xRTOS_HEAP
+{
+	#if portBYTE_ALIGNMENT == 8
+		volatile portDOUBLE dDummy;
+	#else
+		volatile unsigned long ulDummy;
+	#endif	
+	unsigned char ucHeap[ configTOTAL_HEAP_SIZE ];
+} xHeap;
+
+static size_t xNextFreeByte = ( size_t ) 0;
+/*-----------------------------------------------------------*/
+
+void *pvPortMalloc( size_t xWantedSize )
+{
+void *pvReturn = NULL; 
+
+	/* Ensure that blocks are always aligned to the required number of bytes. */
+	#if portBYTE_ALIGNMENT != 1
+		if( xWantedSize & portBYTE_ALIGNMENT_MASK )
+		{
+			/* Byte alignment required. */
+			xWantedSize += ( portBYTE_ALIGNMENT - ( xWantedSize & portBYTE_ALIGNMENT_MASK ) );
+		}
+	#endif
+
+	vTaskSuspendAll();
+	{
+		/* Check there is enough room left for the allocation. */
+		if( ( ( xNextFreeByte + xWantedSize ) < configTOTAL_HEAP_SIZE ) &&
+			( ( xNextFreeByte + xWantedSize ) > xNextFreeByte )	)/* Check for overflow. */
+		{
+			/* Return the next free byte then increment the index past this
+			block. */
+			pvReturn = &( xHeap.ucHeap[ xNextFreeByte ] );
+			xNextFreeByte += xWantedSize;			
+		}	
+	}
+	xTaskResumeAll();
+	
+	#if( configUSE_MALLOC_FAILED_HOOK == 1 )
+	{
+		if( pvReturn == NULL )
+		{
+			extern void vApplicationMallocFailedHook( void );
+			vApplicationMallocFailedHook();
+		}
+	}
+	#endif	
+
+	return pvReturn;
+}
+/*-----------------------------------------------------------*/
+
+void vPortFree( void *pv )
+{
+	/* Memory cannot be freed using this scheme.  See heap_2.c and heap_3.c 
+	for alternative implementations, and the memory management pages of 
+	http://www.FreeRTOS.org for more information. */
+	( void ) pv;
+}
+/*-----------------------------------------------------------*/
+
+void vPortInitialiseBlocks( void )
+{
+	/* Only required when static memory is not cleared. */
+	xNextFreeByte = ( size_t ) 0;
+}
+/*-----------------------------------------------------------*/
+
+size_t xPortGetFreeHeapSize( void )
+{
+	return ( configTOTAL_HEAP_SIZE - xNextFreeByte );
+}
 
 
 

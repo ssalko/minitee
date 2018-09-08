@@ -2,12 +2,6 @@
     FreeRTOS V7.0.1 - Copyright (C) 2011 Real Time Engineers Ltd.
 	
 
-	FreeRTOS supports many tools and architectures. V7.0.0 is sponsored by:
-	Atollic AB - Atollic provides professional embedded systems development 
-	tools for C/C++ development, code analysis and test automation.  
-	See http://www.atollic.com
-	
-
     ***************************************************************************
      *                                                                       *
      *    FreeRTOS tutorial books are available in pdf and paperback.        *
@@ -57,27 +51,67 @@
     licensing and training services.
 */
 
-#ifndef PROJDEFS_H
-#define PROJDEFS_H
 
-/* Defines the prototype to which task functions must conform. */
-typedef void (*pdTASK_CODE)( void * );
+/*
+ * Implementation of pvPortMalloc() and vPortFree() that relies on the
+ * compilers own malloc() and free() implementations.
+ *
+ * This file can only be used if the linker is configured to to generate
+ * a heap memory area.
+ *
+ * See heap_2.c and heap_1.c for alternative implementations, and the memory
+ * management pages of http://www.FreeRTOS.org for more information.
+ */
 
-#define pdTRUE		( 1 )
-#define pdFALSE		( 0 )
+#include <stdlib.h>
 
-#define pdPASS									( 1 )
-#define pdFAIL									( 0 )
-#define errQUEUE_EMPTY							( 0 )
-#define errQUEUE_FULL							( 0 )
+/* Defining MPU_WRAPPERS_INCLUDED_FROM_API_FILE prevents task.h from redefining
+all the API functions to use the MPU wrappers.  That should only be done when
+task.h is included from an application file. */
+#define MPU_WRAPPERS_INCLUDED_FROM_API_FILE
 
-/* Error definitions. */
-#define errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY	( -1 )
-#define errNO_TASK_TO_RUN						( -2 )
-#define errQUEUE_BLOCKED						( -4 )
-#define errQUEUE_YIELD							( -5 )
+#include "FreeRTOS.h"
+#include "task.h"
 
-#endif /* PROJDEFS_H */
+#undef MPU_WRAPPERS_INCLUDED_FROM_API_FILE
+
+/*-----------------------------------------------------------*/
+
+void *pvPortMalloc( size_t xWantedSize )
+{
+void *pvReturn;
+
+	vTaskSuspendAll();
+	{
+		pvReturn = malloc( xWantedSize );
+	}
+	xTaskResumeAll();
+
+	#if( configUSE_MALLOC_FAILED_HOOK == 1 )
+	{
+		if( pvReturn == NULL )
+		{
+			extern void vApplicationMallocFailedHook( void );
+			vApplicationMallocFailedHook();
+		}
+	}
+	#endif
+	
+	return pvReturn;
+}
+/*-----------------------------------------------------------*/
+
+void vPortFree( void *pv )
+{
+	if( pv )
+	{
+		vTaskSuspendAll();
+		{
+			free( pv );
+		}
+		xTaskResumeAll();
+	}
+}
 
 
 
